@@ -1,6 +1,9 @@
 use crate::{auth::Auth, database::Profile, AppState};
-use axum::{extract::State, Json};
-use serde::Serialize;
+use axum::{
+    extract::{Query, State},
+    Json,
+};
+use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::iter;
 use std::sync::Arc;
@@ -60,33 +63,67 @@ pub struct ResponseMultipleArticles {
     articles_count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListArticlesConstraints {
+    tag: Option<String>,
+    author: Option<String>,
+    favorited: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
 pub async fn list_articles(
     State(app): State<Arc<AppState>>,
     authentication: Option<Auth>,
+    Query(query): Query<ListArticlesConstraints>,
 ) -> Json<ResponseMultipleArticles> {
-    // Get the list of article attributes first
-    let list = sqlx::query_as::<_, SimpleArticle>(
+    println!("query {:#?}", query);
+
+    if query.offset.is_some() && query.limit.is_none() {
+        panic!("Offset must be used with limit");
+    };
+
+    let sql = format!(
         "
-            SELECT `id`, `slug`, `title`, `description`,
-                strftime('%Y-%m-%dT%H:%M:%fZ', `createdAt`) AS `createdAt`,
-                strftime('%Y-%m-%dT%H:%M:%fZ', `updatedAt`) AS `updatedAt`,
-            `author`, (
-                SELECT COUNT(*)
-                FROM `favorites`
-                WHERE `favorites`.`source`=? AND `favorites`.`target`=`articles`.`id`
-            ) AS `favorited`, (
-                SELECT COUNT(*)
-                FROM `favorites`
-                WHERE `target`=`articles`.`id`
-            ) AS `favoritesCount`
-            FROM `articles`
-        ",
-    )
-    // Use an `id` which never exists if the user is not authenticated
-    .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1))
-    .fetch_all(&app.db)
-    .await
-    .unwrap();
+        SELECT `id`, `slug`, `title`, `description`,
+            strftime('%Y-%m-%dT%H:%M:%fZ', `createdAt`) AS `createdAt`,
+            strftime('%Y-%m-%dT%H:%M:%fZ', `updatedAt`) AS `updatedAt`,
+        `author`, (
+            SELECT COUNT(*)
+            FROM `favorites`
+            WHERE `favorites`.`source`=? AND `favorites`.`target`=`articles`.`id`
+        ) AS `favorited`, (
+            SELECT COUNT(*)
+            FROM `favorites`
+            WHERE `target`=`articles`.`id`
+        ) AS `favoritesCount`
+        FROM `articles`
+        {}
+        {}
+    ",
+        query.limit.map(|_| "LIMIT ?").unwrap_or(""),
+        query.offset.map(|_| "OFFSET ?").unwrap_or("")
+    );
+    println!("sql {:#?}", sql);
+
+    // Get the list of article attributes first
+    let statement = sqlx::query_as::<_, SimpleArticle>(&sql)
+        // Use an `id` which never exists if the user is not authenticated
+        .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1));
+
+    let statement = if let Some(limit) = query.limit {
+        statement.bind(limit)
+    } else {
+        statement
+    };
+
+    let statement = if let Some(offset) = query.offset {
+        statement.bind(offset)
+    } else {
+        statement
+    };
+
+    let list = statement.fetch_all(&app.db).await.unwrap();
 
     // Then fetch the taglist
     let mut tag_list = Vec::with_capacity(list.len());
