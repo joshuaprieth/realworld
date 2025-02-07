@@ -7,7 +7,7 @@ use axum_extra::headers;
 use axum_extra::TypedHeader;
 use headers::{Header, HeaderName, HeaderValue};
 use serde::Serialize;
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize)]
 pub struct Profile {
@@ -68,4 +68,32 @@ pub async fn get_profile(
             following: profile.following,
         },
     })
+}
+
+pub async fn follow_user(
+    State(app): State<Arc<AppState>>,
+    TypedHeader(token): TypedHeader<Token>,
+    Path(username): Path<String>,
+) -> Json<ResponseProfile> {
+    let user = crate::database::current_user(&app.db, &token.0).await;
+
+    sqlx::query(
+        "
+            INSERT INTO `follows`
+            (`source`, `target`)
+            VALUES
+            (?, (
+                SELECT `id`
+                FROM `users`
+                WHERE `username`=?
+            ))
+        ",
+    )
+    .bind(user.id)
+    .bind(&username)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    get_profile(State(app), Some(TypedHeader(token)), Path(username)).await
 }

@@ -8,7 +8,7 @@ use axum::{
     Router,
 };
 use database::Pool;
-use profile::get_profile;
+use profile::{follow_user, get_profile};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -20,6 +20,7 @@ async fn main() {
         .route("/api/user", get(get_current_user))
         .route("/api/user", put(update_user))
         .route("/api/profiles/{username}", get(get_profile))
+        .route("/api/profiles/{username}/follow", post(follow_user))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));
