@@ -1,4 +1,5 @@
 mod auth;
+mod database;
 
 use auth::{authentication, get_current_user};
 use axum::{
@@ -6,6 +7,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
+use database::Pool;
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +15,9 @@ async fn main() {
         .route("/", get(|| async { "Hello, World!" }))
         .route("/api/users/login", post(authentication))
         .route("/api/user", get(get_current_user))
-        .with_state(Arc::new(AppState {}));
+        .with_state(Arc::new(AppState {
+            db: database::connect().await.unwrap()
+        }));
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -21,4 +25,6 @@ async fn main() {
 }
 
 #[derive(Debug)]
-struct AppState {}
+struct AppState {
+    db: Pool
+}
