@@ -98,6 +98,7 @@ pub async fn list_articles(
             WHERE `target`=`articles`.`id`
         ) AS `favoritesCount`
         FROM `articles`
+        ORDER BY `updatedAt` DESC
         {}
         {}
     ",
