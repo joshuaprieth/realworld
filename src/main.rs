@@ -1,13 +1,11 @@
 use axum::{
     routing::{get, post},
-    Router,
-    Json
+    Json, Router,
 };
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() {
-    // build our application with a single route
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
         .route("/api/users/login", post(authentication));
@@ -23,23 +21,23 @@ struct User {
     token: String,
     username: String,
     bio: String,
-    image: Option<String>
+    image: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct ResponseUser {
-    user: User
+    user: User,
 }
 
 #[derive(Debug, Deserialize)]
 struct Authentication {
-    user: AuthenticationUser
+    user: AuthenticationUser,
 }
 
 #[derive(Debug, Deserialize)]
 struct AuthenticationUser {
     email: String,
-    password: String
+    password: String,
 }
 
 async fn authentication(Json(authenticate): Json<Authentication>) -> Json<ResponseUser> {
@@ -51,7 +49,7 @@ async fn authentication(Json(authenticate): Json<Authentication>) -> Json<Respon
             token: String::from("jwt.token.here"),
             username: String::from("jake"),
             bio: String::from("I work at statefarm"),
-            image: None
-        }
+            image: None,
+        },
     })
 }
