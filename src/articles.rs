@@ -740,7 +740,7 @@ pub async fn favorite_article(
     State(app): State<Arc<AppState>>,
     Auth(user_id): Auth,
     Path(slug): Path<String>,
-)  -> Json<ResponseSingleArticle> {
+) -> Json<ResponseSingleArticle> {
     sqlx::query(
         "
             INSERT INTO `favorites`
@@ -748,6 +748,30 @@ pub async fn favorite_article(
             SELECT ?, `id`
             FROM `articles`
             WHERE `articles`.`slug`=?
+        ",
+    )
+    .bind(user_id)
+    .bind(&slug)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    get_article(State(app), Some(Auth(user_id)), Path(slug)).await
+}
+
+pub async fn unfavorite_article(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Path(slug): Path<String>,
+) -> Json<ResponseSingleArticle> {
+    sqlx::query(
+        "
+            DELETE FROM `favorites`
+            WHERE `source`=? AND `target` IN (
+                SELECT `id`
+                FROM `articles`
+                WHERE `slug`=?
+            )
         ",
     )
     .bind(user_id)
