@@ -100,7 +100,10 @@ pub async fn list_articles(
         FROM `articles`
         {}
         {}
+        WHERE
         {}
+        AND {}
+        AND {}
         ORDER BY `updatedAt` DESC
         {}
         {}
@@ -109,23 +112,32 @@ pub async fn list_articles(
             .tag
             .as_ref()
             .map(|_| "
-            JOIN `taglist` ON `taglist`.`article`=`articles`.`id`
-            JOIN `tags` ON `tags`.`id`=`taglist`.`tag`
-        ")
+                JOIN `taglist` ON `taglist`.`article`=`articles`.`id`
+                JOIN `tags` ON `tags`.`id`=`taglist`.`tag`
+            ")
             .unwrap_or(""),
-        if query.tag.is_some() || query.author.is_some() || query.favorited.is_some() {
-            "WHERE"
-        } else {
-            ""
-        },
-        vec![query
+        query
+            .author
+            .as_ref()
+            .map(|_| "
+                JOIN `users` on `users`.`id`=`articles`.`author`
+            ")
+            .unwrap_or(""),
+        query
             .tag
             .as_ref()
             .map(|_| "
                 `tags`.`name`=?
             ")
-            .unwrap_or(""),]
-        .join(" AND "),
+            .unwrap_or("TRUE"),
+        query
+            .author
+            .as_ref()
+            .map(|_| "
+                `users`.`username`=?
+            ")
+            .unwrap_or("TRUE"),
+        "TRUE",
         query.limit.map(|_| "LIMIT ?").unwrap_or(""),
         query.offset.map(|_| "OFFSET ?").unwrap_or("")
     );
@@ -137,6 +149,12 @@ pub async fn list_articles(
         .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1));
 
     let statement = if let Some(name) = query.tag {
+        statement.bind(name)
+    } else {
+        statement
+    };
+
+    let statement = if let Some(name) = query.author {
         statement.bind(name)
     } else {
         statement
