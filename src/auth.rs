@@ -78,15 +78,24 @@ pub async fn authentication(
     State(state): State<Arc<AppState>>,
     Json(authenticate): Json<Authentication>,
 ) -> Json<ResponseUser> {
-    println!("{:#?}", authenticate);
+    let user = sqlx::query_as::<_, crate::database::User>(
+        "
+            SELECT * FROM `users` WHERE `email`=? AND `password`=?
+    ",
+    )
+    .bind(&authenticate.user.email)
+    .bind(&authenticate.user.password)
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
 
     Json(ResponseUser {
         user: User {
-            email: String::from("jake@jake.jake"),
-            token: String::from("jwt.token.here"),
-            username: String::from("jake"),
-            bio: Some(String::from("I work at statefarm")),
-            image: None,
+            email: user.email.clone(),
+            token: user.email,
+            username: user.username,
+            bio: user.bio,
+            image: user.image,
         },
     })
 }
@@ -110,25 +119,6 @@ pub async fn registration(
     .await
     .unwrap();
 
-    #[derive(sqlx::FromRow, Debug)]
-    struct UserA {
-        email: String,
-        password: String,
-        username: String,
-        bio: Option<String>,
-        image: Option<String>,
-    }
-    let res = sqlx::query_as::<_, UserA>(
-        "
-            SELECT * from `users`
-    ",
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
-
-    println!("{:#?}", res);
-
     Json(ResponseUser {
         user: User {
             email: registration.user.email.clone(),
@@ -144,13 +134,23 @@ pub async fn get_current_user(
     State(state): State<Arc<AppState>>,
     TypedHeader(token): TypedHeader<Token>,
 ) -> Json<ResponseUser> {
+    let user = sqlx::query_as::<_, crate::database::User>(
+        "
+            SELECT * FROM `users` WHERE `email`=?
+    ",
+    )
+    .bind(token.0)
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+
     Json(ResponseUser {
         user: User {
-            email: String::from("jake@jake.jake"),
-            token: String::from("jwt.token.here"),
-            username: String::from("jake"),
-            bio: Some(String::from("I work at statefarm")),
-            image: None,
+            email: user.email.clone(),
+            token: user.email,
+            username: user.username,
+            bio: user.bio,
+            image: user.image,
         },
     })
 }

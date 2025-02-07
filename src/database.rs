@@ -1,4 +1,4 @@
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::{sqlite::SqlitePoolOptions, FromRow};
 
 pub use sqlx::sqlite::SqlitePool as Pool;
 
@@ -19,7 +19,17 @@ pub async fn connect() -> Result<Pool, sqlx::Error> {
             )
         ",
     )
-    .execute(&pool).await?;
+    .execute(&pool)
+    .await?;
 
     Ok(pool)
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct User {
+    pub email: String,
+    pub password: String,
+    pub username: String,
+    pub bio: Option<String>,
+    pub image: Option<String>,
 }
