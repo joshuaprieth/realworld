@@ -1,6 +1,6 @@
 use crate::{auth::Auth, database::Profile, AppState};
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -8,29 +8,9 @@ use sqlx::FromRow;
 use std::iter;
 use std::sync::Arc;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Article {
-    slug: String,
-    title: String,
-    description: String,
-    body: String,
-    tag_list: Vec<String>,
-    created_at: String,
-    updated_at: String,
-    favorited: bool,
-    favorites_count: usize,
-    author: Profile,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResponseArticle {
-    article: Article,
-}
-
 #[derive(Debug, FromRow)]
 #[sqlx(rename_all = "camelCase")]
-pub struct SimpleArticle {
+pub struct SimpleNoBodyArticle {
     id: i64,
     slug: String,
     title: String,
@@ -149,7 +129,7 @@ pub async fn list_articles(
     );
 
     // Get the list of article attributes first
-    let statement = sqlx::query_as::<_, SimpleArticle>(&sql)
+    let statement = sqlx::query_as::<_, SimpleNoBodyArticle>(&sql)
         // Use an `id` which never exists if the user is not authenticated
         .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1));
 
@@ -273,5 +253,130 @@ pub async fn list_articles(
     Json(ResponseMultipleArticles {
         articles_count: articles.len(),
         articles,
+    })
+}
+
+#[derive(Debug, FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct SimpleBodyArticle {
+    id: i64,
+    slug: String,
+    title: String,
+    description: String,
+    body: String,
+    created_at: String,
+    updated_at: String,
+    author: i64,
+    favorited: bool,
+    favorites_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BodyArticle {
+    slug: String,
+    title: String,
+    description: String,
+    body: String,
+    tag_list: Vec<String>,
+    created_at: String,
+    updated_at: String,
+    favorited: bool,
+    favorites_count: i64,
+    author: Profile,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseSingleArticle {
+    article: BodyArticle,
+}
+
+pub async fn get_article(
+    State(app): State<Arc<AppState>>,
+    authentication: Option<Auth>,
+    Path(slug): Path<String>,
+) -> Json<ResponseSingleArticle> {
+    let article = sqlx::query_as::<_, SimpleBodyArticle>(
+        "
+        SELECT `id`, `slug`, `title`, `description`, `body`,
+            strftime('%Y-%m-%dT%H:%M:%fZ', `createdAt`) AS `createdAt`,
+            strftime('%Y-%m-%dT%H:%M:%fZ', `updatedAt`) AS `updatedAt`,
+            `author`, (
+                SELECT COUNT(*)
+                FROM `favorites`
+                WHERE `favorites`.`source`=? AND `favorites`.`target`=`articles`.`id`
+            ) AS `favorited`, (
+                SELECT COUNT(*)
+                FROM `favorites`
+                WHERE `target`=`articles`.`id`
+            ) AS `favoritesCount`
+        FROM `articles`
+        WHERE `slug`=?
+        ",
+    )
+    .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1))
+    .bind(slug)
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+
+    // Fetch the taglist
+    let tags: Vec<String> = sqlx::query_scalar(
+        "
+            SELECT `name`
+            FROM `taglist` INNER JOIN `tags` ON `taglist`.`tag`=`tags`.`id`
+            WHERE `article`=?
+        ",
+    )
+    .bind(article.id)
+    .fetch_all(&app.db)
+    .await
+    .unwrap();
+
+    // Then the authors
+    let profile = if let Some(ref authentication) = authentication {
+        let user_id = authentication.0;
+
+        sqlx::query_as::<_, crate::database::Profile>(
+            "
+                SELECT `username`, `bio`, `image`, (
+                    SELECT COUNT(*)
+                    FROM `follows`
+                    WHERE `follows`.`source`=? AND `follows`.`target`=`users`.`id`
+                ) AS `following`
+                FROM `users`
+                WHERE `users`.`id`=?
+            ",
+        )
+        .bind(user_id)
+        .bind(article.author)
+    } else {
+        sqlx::query_as::<_, crate::database::Profile>(
+            "
+                    SELECT `username`, `bio`, `image`, FALSE AS `following`
+                    FROM `users`
+                    WHERE `users`.`id`=?
+                ",
+        )
+        .bind(article.author)
+    }
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+
+    Json(ResponseSingleArticle {
+        article: BodyArticle {
+            slug: article.slug,
+            title: article.title,
+            description: article.description,
+            body: article.body,
+            tag_list: tags,
+            created_at: article.created_at,
+            updated_at: article.updated_at,
+            favorited: article.favorited,
+            favorites_count: article.favorites_count,
+            author: profile,
+        },
     })
 }
