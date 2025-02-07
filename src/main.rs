@@ -1,5 +1,6 @@
 mod articles;
 mod auth;
+mod comments;
 mod database;
 mod profile;
 mod token;
@@ -12,6 +13,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
+use comments::add_comment;
 use database::Pool;
 use profile::{follow_user, get_profile, unfollow_user};
 use std::sync::Arc;
@@ -33,6 +35,7 @@ async fn main() {
         .route("/api/articles", post(create_article))
         .route("/api/articles/{slug}", put(update_article))
         .route("/api/articles/{slug}", delete(delete_article))
+        .route("/api/articles/{slug}/comments", post(add_comment))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));
