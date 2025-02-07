@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{iter, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Token(String);
+pub struct Token(pub String);
 
 static TOKEN: HeaderName = HeaderName::from_static("authorization");
 

@@ -1,14 +1,14 @@
 mod auth;
-mod profile;
 mod database;
+mod profile;
 
 use auth::{authentication, get_current_user, registration, update_user};
-use profile::{get_profile_authenticated, get_profile};
 use axum::{
     routing::{get, post, put},
     Router,
 };
 use database::Pool;
+use profile::get_profile;
 use std::sync::Arc;
 
 #[tokio::main]
