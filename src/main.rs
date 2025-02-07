@@ -13,7 +13,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use comments::add_comment;
+use comments::{add_comment, get_comments};
 use database::Pool;
 use profile::{follow_user, get_profile, unfollow_user};
 use std::sync::Arc;
@@ -36,6 +36,7 @@ async fn main() {
         .route("/api/articles/{slug}", put(update_article))
         .route("/api/articles/{slug}", delete(delete_article))
         .route("/api/articles/{slug}/comments", post(add_comment))
+        .route("/api/articles/{slug}/comments", get(get_comments))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));
