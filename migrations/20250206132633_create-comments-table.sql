@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS `comments` (
+    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
+    `article` INTEGER NOT NULL,
+    `createdAt` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updatedAt` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `body` TEXT NOT NULL,
+    `author` INTEGER NOT NULL,
+    FOREIGN KEY (`author`) REFERENCES `users`(`id`)
+    FOREIGN KEY (`article`) REFERENCES `articles`(`id`)
+)

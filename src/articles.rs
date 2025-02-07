@@ -698,7 +698,6 @@ pub async fn delete_article(
     .fetch_one(&app.db)
     .await
     .unwrap();
-    println!("id is {}", article_id);
 
     // First, delete the favorites
     sqlx::query(
