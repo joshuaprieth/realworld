@@ -85,7 +85,7 @@ pub async fn list_articles(
 
     let sql = format!(
         "
-        SELECT `id`, `slug`, `title`, `description`,
+        SELECT `articles`.`id`, `slug`, `title`, `description`,
             strftime('%Y-%m-%dT%H:%M:%fZ', `createdAt`) AS `createdAt`,
             strftime('%Y-%m-%dT%H:%M:%fZ', `updatedAt`) AS `updatedAt`,
         `author`, (
@@ -98,19 +98,49 @@ pub async fn list_articles(
             WHERE `target`=`articles`.`id`
         ) AS `favoritesCount`
         FROM `articles`
+        {}
+        {}
+        {}
         ORDER BY `updatedAt` DESC
         {}
         {}
     ",
+        query
+            .tag
+            .as_ref()
+            .map(|_| "
+            JOIN `taglist` ON `taglist`.`article`=`articles`.`id`
+            JOIN `tags` ON `tags`.`id`=`taglist`.`tag`
+        ")
+            .unwrap_or(""),
+        if query.tag.is_some() || query.author.is_some() || query.favorited.is_some() {
+            "WHERE"
+        } else {
+            ""
+        },
+        vec![query
+            .tag
+            .as_ref()
+            .map(|_| "
+                `tags`.`name`=?
+            ")
+            .unwrap_or(""),]
+        .join(" AND "),
         query.limit.map(|_| "LIMIT ?").unwrap_or(""),
         query.offset.map(|_| "OFFSET ?").unwrap_or("")
     );
-    println!("sql {:#?}", sql);
+    println!("sql {}", sql);
 
     // Get the list of article attributes first
     let statement = sqlx::query_as::<_, SimpleArticle>(&sql)
         // Use an `id` which never exists if the user is not authenticated
         .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1));
+
+    let statement = if let Some(name) = query.tag {
+        statement.bind(name)
+    } else {
+        statement
+    };
 
     let statement = if let Some(limit) = query.limit {
         statement.bind(limit)
