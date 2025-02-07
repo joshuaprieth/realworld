@@ -1,7 +1,7 @@
 mod auth;
 mod database;
 
-use auth::{authentication, get_current_user};
+use auth::{authentication, get_current_user, registration};
 use axum::{
     routing::{get, post},
     Router,
@@ -14,6 +14,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
         .route("/api/users/login", post(authentication))
+        .route("/api/users", post(registration))
         .route("/api/user", get(get_current_user))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap()
