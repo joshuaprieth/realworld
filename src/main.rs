@@ -6,7 +6,8 @@ mod profile;
 mod token;
 
 use articles::{
-    create_article, delete_article, feed_articles, get_article, list_articles, update_article,
+    create_article, delete_article, favorite_article, feed_articles, get_article, list_articles,
+    update_article,
 };
 use auth::{authentication, get_current_user, registration, update_user};
 use axum::{
@@ -38,6 +39,7 @@ async fn main() {
         .route("/api/articles/{slug}/comments", post(add_comment))
         .route("/api/articles/{slug}/comments", get(get_comments))
         .route("/api/articles/{slug}/comments/{id}", delete(delete_comment))
+        .route("/api/articles/{slug}/favorite", post(favorite_article))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));

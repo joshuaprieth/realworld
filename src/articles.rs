@@ -736,6 +736,29 @@ pub async fn delete_article(
     .unwrap();
 }
 
+pub async fn favorite_article(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Path(slug): Path<String>,
+)  -> Json<ResponseSingleArticle> {
+    sqlx::query(
+        "
+            INSERT INTO `favorites`
+            (`source`, `target`)
+            SELECT ?, `id`
+            FROM `articles`
+            WHERE `articles`.`slug`=?
+        ",
+    )
+    .bind(user_id)
+    .bind(&slug)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    get_article(State(app), Some(Auth(user_id)), Path(slug)).await
+}
+
 fn create_slug(string: &str) -> String {
     string.replace(' ', "-").to_lowercase()
 }
