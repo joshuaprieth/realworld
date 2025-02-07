@@ -681,6 +681,62 @@ pub async fn update_article(
     get_article(State(app), Some(Auth(user_id)), Path(new_slug)).await
 }
 
+pub async fn delete_article(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Path(slug): Path<String>,
+) {
+    let article_id: i64 = sqlx::query_scalar(
+        "
+            SELECT `id`
+            FROM `articles`
+            WHERE `slug`=? AND `author`=?
+        ",
+    )
+    .bind(slug)
+    .bind(user_id) // Make sure only owners can delete their articles
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+    println!("id is {}", article_id);
+
+    // First, delete the favorites
+    sqlx::query(
+        "
+            DELETE FROM `favorites`
+            WHERE `target`=?
+        ",
+    )
+    .bind(article_id)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    // Then, delete the tags
+    sqlx::query(
+        "
+        DELETE FROM `taglist`
+        WHERE `article`=?
+    ",
+    )
+    .bind(article_id)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    // Finally, delete the articles
+    sqlx::query(
+        "
+            DELETE FROM `articles`
+            WHERE `id`=?
+        ",
+    )
+    .bind(article_id)
+    .execute(&app.db)
+    .await
+    .unwrap();
+}
+
 fn create_slug(string: &str) -> String {
     string.replace(' ', "-").to_lowercase()
 }
