@@ -181,3 +181,35 @@ pub async fn get_comments(
             .collect(),
     })
 }
+
+pub async fn delete_comment(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Path((slug, comment_id)): Path<(String, String)>,
+) {
+    let comment_id: i64 = sqlx::query_scalar(
+        "
+            SELECT `comments`.`id`
+            FROM `comments`
+            JOIN `articles` ON `articles`.`id`=`comments`.`article`
+            WHERE `articles`.`slug`=? AND `comments`.`id`=? AND `comments`.`author`=?
+        ",
+    )
+    .bind(slug) // Not necessary but required in the specification
+    .bind(comment_id)
+    .bind(user_id) // Make sure only owners can delete their comments
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "
+            DELETE FROM `comments`
+            WHERE `id`=?
+        ",
+    )
+    .bind(comment_id)
+    .execute(&app.db)
+    .await
+    .unwrap();
+}
