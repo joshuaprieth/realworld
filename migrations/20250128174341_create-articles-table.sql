@@ -6,6 +6,6 @@ CREATE TABLE IF NOT EXISTS `articles` (
     `body` TEXT NOT NULL,
     `createdAt` TEXT NOT NULL,
     `updatedAt` TEXT NOT NULL,
-    `author` INTEGER NOT NULL UNIQUE,
+    `author` INTEGER NOT NULL,
     FOREIGN KEY (`author`) REFERENCES `users`(`id`)
 )
