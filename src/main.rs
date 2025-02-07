@@ -1,13 +1,13 @@
 mod auth;
 mod database;
 
-use auth::{authentication, get_current_user, registration};
+use auth::{authentication, get_current_user, registration, update_user};
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
-use std::sync::Arc;
 use database::Pool;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -16,8 +16,9 @@ async fn main() {
         .route("/api/users/login", post(authentication))
         .route("/api/users", post(registration))
         .route("/api/user", get(get_current_user))
+        .route("/api/user", put(update_user))
         .with_state(Arc::new(AppState {
-            db: database::connect().await.unwrap()
+            db: database::connect().await.unwrap(),
         }));
 
     // run our app with hyper, listening globally on port 3000
@@ -27,5 +28,5 @@ async fn main() {
 
 #[derive(Debug)]
 struct AppState {
-    db: Pool
+    db: Pool,
 }

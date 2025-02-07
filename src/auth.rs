@@ -62,18 +62,6 @@ pub struct AuthenticationUser {
     password: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Registration {
-    user: RegistrationUser,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RegistrationUser {
-    username: String,
-    email: String,
-    password: String,
-}
-
 pub async fn authentication(
     State(state): State<Arc<AppState>>,
     Json(authenticate): Json<Authentication>,
@@ -98,6 +86,18 @@ pub async fn authentication(
             image: user.image,
         },
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Registration {
+    user: RegistrationUser,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegistrationUser {
+    username: String,
+    email: String,
+    password: String,
 }
 
 pub async fn registration(
@@ -153,4 +153,48 @@ pub async fn get_current_user(
             image: user.image,
         },
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Update {
+    user: UpdateUser,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUser {
+    email: Option<String>,
+    password: Option<String>,
+    username: Option<String>,
+    bio: Option<String>,
+    image: Option<String>,
+}
+
+pub async fn update_user(
+    State(state): State<Arc<AppState>>,
+    TypedHeader(token): TypedHeader<Token>,
+    Json(update): Json<Update>,
+) -> Json<ResponseUser> {
+    async fn update_field(state: &AppState, name: &str, value: &Option<String>) {
+        if let Some(value) = value {
+            sqlx::query(&format!(
+                "
+                    UPDATE `users`
+                    SET {}=?
+                ",
+                name
+            ))
+            .bind(&value)
+            .execute(&state.db)
+            .await
+            .unwrap();
+        }
+    }
+
+    update_field(&state, "email", &update.user.email).await;
+    update_field(&state, "password", &update.user.password).await;
+    update_field(&state, "username", &update.user.username).await;
+    update_field(&state, "bio", &update.user.bio).await;
+    update_field(&state, "image", &update.user.image).await;
+
+    get_current_user(State(state), TypedHeader(token)).await
 }
