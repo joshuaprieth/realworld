@@ -1,6 +1,7 @@
 mod auth;
 mod database;
 mod profile;
+mod token;
 
 use auth::{authentication, get_current_user, registration, update_user};
 use axum::{

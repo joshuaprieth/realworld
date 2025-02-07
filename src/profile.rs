@@ -1,11 +1,10 @@
-use crate::{auth::Token, AppState};
+use crate::{auth::Token, token::authenticate, AppState};
 use axum::{
     extract::{Path, State},
     Json,
 };
 use axum_extra::headers;
 use axum_extra::TypedHeader;
-use headers::{Header, HeaderName, HeaderValue};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -28,7 +27,7 @@ pub async fn get_profile(
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
     let profile = if let Some(token) = token {
-        let user = crate::database::current_user(&app.db, &token.0 .0).await;
+        let user_id = authenticate(&token.0 .0);
 
         sqlx::query_as::<_, crate::database::Profile>(
             "
@@ -41,7 +40,7 @@ pub async fn get_profile(
             WHERE `users`.`username`=?
         ",
         )
-        .bind(user.id)
+        .bind(user_id)
         .bind(&username)
         .fetch_one(&app.db)
         .await
@@ -75,7 +74,7 @@ pub async fn follow_user(
     TypedHeader(token): TypedHeader<Token>,
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
-    let user = crate::database::current_user(&app.db, &token.0).await;
+    let user_id = authenticate(&token.0);
 
     sqlx::query(
         "
@@ -89,7 +88,7 @@ pub async fn follow_user(
             ))
         ",
     )
-    .bind(user.id)
+    .bind(user_id)
     .bind(&username)
     .execute(&app.db)
     .await
@@ -103,7 +102,7 @@ pub async fn unfollow_user(
     TypedHeader(token): TypedHeader<Token>,
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
-    let user = crate::database::current_user(&app.db, &token.0).await;
+    let user_id = authenticate(&token.0);
 
     sqlx::query(
         "
@@ -115,7 +114,7 @@ pub async fn unfollow_user(
             )
         ",
     )
-    .bind(user.id)
+    .bind(user_id)
     .bind(&username)
     .execute(&app.db)
     .await

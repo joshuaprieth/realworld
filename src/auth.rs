@@ -1,3 +1,4 @@
+use crate::token::{authenticate, create_token};
 use crate::AppState;
 use axum::{extract::State, Json};
 use axum_extra::headers;
@@ -80,7 +81,7 @@ pub async fn authentication(
     Json(ResponseUser {
         user: User {
             email: user.email.clone(),
-            token: user.email,
+            token: create_token(user.id),
             username: user.username,
             bio: user.bio,
             image: user.image,
@@ -119,27 +120,30 @@ pub async fn registration(
     .await
     .unwrap();
 
-    Json(ResponseUser {
-        user: User {
-            email: registration.user.email.clone(),
-            username: registration.user.username,
-            token: registration.user.email,
-            bio: None,
-            image: None,
-        },
-    })
+    authentication(
+        State(state),
+        Json(Authentication {
+            user: AuthenticationUser {
+                email: registration.user.email,
+                password: registration.user.password,
+            },
+        }),
+    )
+    .await
 }
 
 pub async fn get_current_user(
     State(state): State<Arc<AppState>>,
     TypedHeader(token): TypedHeader<Token>,
 ) -> Json<ResponseUser> {
+    let user_id = authenticate(&token.0);
+
     let user = sqlx::query_as::<_, crate::database::User>(
         "
-            SELECT * FROM `users` WHERE `email`=?
+            SELECT * FROM `users` WHERE `id`=?
     ",
     )
-    .bind(token.0)
+    .bind(user_id)
     .fetch_one(&state.db)
     .await
     .unwrap();
@@ -147,7 +151,7 @@ pub async fn get_current_user(
     Json(ResponseUser {
         user: User {
             email: user.email.clone(),
-            token: user.email,
+            token: token.0,
             username: user.username,
             bio: user.bio,
             image: user.image,
@@ -174,29 +178,31 @@ pub async fn update_user(
     TypedHeader(token): TypedHeader<Token>,
     Json(update): Json<Update>,
 ) -> Json<ResponseUser> {
-    async fn update_field(state: &AppState, token: &Token, name: &str, value: &Option<String>) {
+    let user_id = authenticate(&token.0);
+
+    async fn update_field(state: &AppState, user_id: i64, name: &str, value: &Option<String>) {
         if let Some(value) = value {
             sqlx::query(&format!(
                 "
                     UPDATE `users`
                     SET {}=?
-                    WHERE `users`.`email`=?
+                    WHERE `users`.`id`=?
                 ",
                 name
             ))
             .bind(&value)
-            .bind(&token.0)
+            .bind(&user_id)
             .execute(&state.db)
             .await
             .unwrap();
         }
     }
 
-    update_field(&state, &token, "email", &update.user.email).await;
-    update_field(&state, &token, "password", &update.user.password).await;
-    update_field(&state, &token, "username", &update.user.username).await;
-    update_field(&state, &token, "bio", &update.user.bio).await;
-    update_field(&state, &token, "image", &update.user.image).await;
+    update_field(&state, user_id, "email", &update.user.email).await;
+    update_field(&state, user_id, "password", &update.user.password).await;
+    update_field(&state, user_id, "username", &update.user.username).await;
+    update_field(&state, user_id, "bio", &update.user.bio).await;
+    update_field(&state, user_id, "image", &update.user.image).await;
 
     get_current_user(State(state), TypedHeader(token)).await
 }
