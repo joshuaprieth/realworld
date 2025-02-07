@@ -1,3 +1,4 @@
+use serde::Serialize;
 use sqlx::{sqlite::SqlitePoolOptions, FromRow};
 
 pub use sqlx::sqlite::SqlitePool as Pool;
@@ -21,7 +22,7 @@ pub struct User {
     pub image: Option<String>,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Serialize)]
 pub struct Profile {
     pub username: String,
     pub bio: Option<String>,
