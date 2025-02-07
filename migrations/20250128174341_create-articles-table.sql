@@ -4,8 +4,8 @@ CREATE TABLE IF NOT EXISTS `articles` (
     `title` TEXT NOT NULL,
     `description` TEXT NOT NULL,
     `body` TEXT NOT NULL,
-    `createdAt` TEXT NOT NULL,
-    `updatedAt` TEXT NOT NULL,
+    `createdAt` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updatedAt` TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `author` INTEGER NOT NULL,
     FOREIGN KEY (`author`) REFERENCES `users`(`id`)
 )
