@@ -77,8 +77,6 @@ pub async fn list_articles(
     authentication: Option<Auth>,
     Query(query): Query<ListArticlesConstraints>,
 ) -> Json<ResponseMultipleArticles> {
-    println!("query {:#?}", query);
-
     if query.offset.is_some() && query.limit.is_none() {
         panic!("Offset must be used with limit");
     };
@@ -92,7 +90,7 @@ pub async fn list_articles(
             SELECT COUNT(*)
             FROM `favorites`
             WHERE `favorites`.`source`=? AND `favorites`.`target`=`articles`.`id`
-        ) AS `favorited`, (
+        ) AS `favorited`, {}, (
             SELECT COUNT(*)
             FROM `favorites`
             WHERE `target`=`articles`.`id`
@@ -103,11 +101,20 @@ pub async fn list_articles(
         WHERE
         {}
         AND {}
-        AND {}
+        AND `favoritedByTarget`=TRUE
         ORDER BY `updatedAt` DESC
         {}
         {}
     ",
+        query
+            .favorited
+            .as_ref()
+            .map(|_| "(
+            SELECT COUNT(*)
+            FROM `favorites`
+            WHERE `favorites`.`source`=? AND `favorites`.`target`=`articles`.`id`
+        ) AS `favoritedByTarget`")
+            .unwrap_or("TRUE AS `favoritedByTarget`"),
         query
             .tag
             .as_ref()
@@ -120,7 +127,7 @@ pub async fn list_articles(
             .author
             .as_ref()
             .map(|_| "
-                JOIN `users` on `users`.`id`=`articles`.`author`
+                JOIN `users` ON `users`.`id`=`articles`.`author`
             ")
             .unwrap_or(""),
         query
@@ -137,16 +144,33 @@ pub async fn list_articles(
                 `users`.`username`=?
             ")
             .unwrap_or("TRUE"),
-        "TRUE",
         query.limit.map(|_| "LIMIT ?").unwrap_or(""),
         query.offset.map(|_| "OFFSET ?").unwrap_or("")
     );
-    println!("sql {}", sql);
 
     // Get the list of article attributes first
     let statement = sqlx::query_as::<_, SimpleArticle>(&sql)
         // Use an `id` which never exists if the user is not authenticated
         .bind(authentication.as_ref().map(|auth| auth.0).unwrap_or(-1));
+
+    let statement = if let Some(name) = query.favorited {
+        let id: i64 = sqlx::query_scalar(
+            "
+            SELECT `id`
+            FROM `users`
+            WHERE `username`=?
+        ",
+        )
+        .bind(name)
+        .fetch_one(&app.db)
+        .await
+        .unwrap();
+        println!("has id {}", id);
+
+        statement.bind(id)
+    } else {
+        statement
+    };
 
     let statement = if let Some(name) = query.tag {
         statement.bind(name)
