@@ -14,7 +14,7 @@ pub struct Profile {
     pub username: String,
     pub bio: Option<String>,
     pub image: Option<String>,
-    pub following: i64,
+    pub following: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,7 +49,7 @@ pub async fn get_profile(
     } else {
         sqlx::query_as::<_, crate::database::Profile>(
             "
-                SELECT `username`, `bio`, `image`, false AS `following`
+                SELECT `username`, `bio`, `image`, FALSE AS `following`
                 FROM `users`
                 WHERE `users`.`username`=?
             ",

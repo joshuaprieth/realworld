@@ -26,7 +26,7 @@ pub struct Profile {
     pub username: String,
     pub bio: Option<String>,
     pub image: Option<String>,
-    pub following: i64,
+    pub following: bool,
 }
 
 pub async fn current_user(pool: &Pool, token: &str) -> User {
