@@ -1,10 +1,8 @@
-use crate::{auth::Token, token::authenticate, AppState};
+use crate::{auth::Auth, AppState};
 use axum::{
     extract::{Path, State},
     Json,
 };
-use axum_extra::headers;
-use axum_extra::TypedHeader;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -23,11 +21,11 @@ pub struct ResponseProfile {
 
 pub async fn get_profile(
     State(app): State<Arc<AppState>>,
-    token: Option<TypedHeader<Token>>,
+    authentication: Option<Auth>,
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
-    let profile = if let Some(token) = token {
-        let user_id = authenticate(&token.0 .0);
+    let profile = if let Some(authentication) = authentication {
+        let user_id = authentication.0;
 
         sqlx::query_as::<_, crate::database::Profile>(
             "
@@ -71,11 +69,9 @@ pub async fn get_profile(
 
 pub async fn follow_user(
     State(app): State<Arc<AppState>>,
-    TypedHeader(token): TypedHeader<Token>,
+    Auth(user_id): Auth,
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
-    let user_id = authenticate(&token.0);
-
     sqlx::query(
         "
             INSERT INTO `follows`
@@ -94,16 +90,14 @@ pub async fn follow_user(
     .await
     .unwrap();
 
-    get_profile(State(app), Some(TypedHeader(token)), Path(username)).await
+    get_profile(State(app), Some(Auth(user_id)), Path(username)).await
 }
 
 pub async fn unfollow_user(
     State(app): State<Arc<AppState>>,
-    TypedHeader(token): TypedHeader<Token>,
+    Auth(user_id): Auth,
     Path(username): Path<String>,
 ) -> Json<ResponseProfile> {
-    let user_id = authenticate(&token.0);
-
     sqlx::query(
         "
             DELETE FROM `follows`
@@ -120,5 +114,5 @@ pub async fn unfollow_user(
     .await
     .unwrap();
 
-    get_profile(State(app), Some(TypedHeader(token)), Path(username)).await
+    get_profile(State(app), Some(Auth(user_id)), Path(username)).await
 }

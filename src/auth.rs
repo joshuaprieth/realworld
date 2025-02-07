@@ -1,40 +1,75 @@
 use crate::token::{authenticate, create_token};
 use crate::AppState;
-use axum::{extract::State, Json};
-use axum_extra::headers;
-use axum_extra::TypedHeader;
-use headers::{Header, HeaderName, HeaderValue};
+use axum::body::Body;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts, State};
+use axum::http::request::Parts;
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde::{Deserialize, Serialize};
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Token(pub String);
+#[derive(Debug, Clone)]
+pub enum AuthenticationFailure {
+    MissingToken,
+    InvalidToken,
+}
 
-static TOKEN: HeaderName = HeaderName::from_static("authorization");
-
-impl Header for Token {
-    fn name() -> &'static HeaderName {
-        &TOKEN
+impl IntoResponse for AuthenticationFailure {
+    fn into_response(self) -> Response {
+        Response::builder()
+            .status(401)
+            .body(Body::new(String::from("401 Unauthorized")))
+            .unwrap()
     }
+}
 
-    fn decode<'i, I>(values: &mut I) -> Result<Self, headers::Error>
-    where
-        I: Iterator<Item = &'i HeaderValue>,
-    {
-        let first = values.next().ok_or_else(headers::Error::invalid)?;
-        let string = first.to_str().map_err(|_| headers::Error::invalid())?;
+#[derive(Debug, Clone)]
+pub struct Auth(pub i64);
+impl<S> FromRequestParts<S> for Auth
+where
+    S: Sync + Send,
+{
+    type Rejection = AuthenticationFailure;
 
-        if string.starts_with("Token ") {
-            Ok(Token(string[6..].to_string()))
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let mut values = parts.headers.get_all("authorization").iter();
+
+        if let Some(value) = values.next() {
+            if let Ok(string) = value.to_str() {
+                if string.starts_with("Token ") {
+                    let token = &string[6..];
+                    let user_id = authenticate(token);
+
+                    Ok(Auth(user_id))
+                } else {
+                    Err(AuthenticationFailure::InvalidToken)
+                }
+            } else {
+                Err(AuthenticationFailure::InvalidToken)
+            }
         } else {
-            Err(headers::Error::invalid())
+            // There is no token header
+            Err(AuthenticationFailure::MissingToken)
         }
     }
+}
 
-    fn encode<E: Extend<HeaderValue>>(&self, values: &mut E) {
-        values.extend(iter::once(
-            HeaderValue::from_str(&format!("Token {}", self.0)).unwrap(),
-        ));
+impl<S> OptionalFromRequestParts<S> for Auth
+where
+    S: Sync + Send,
+{
+    type Rejection = AuthenticationFailure;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        match <Auth as FromRequestParts<S>>::from_request_parts(parts, _state).await {
+            Ok(auth) => Ok(Some(auth)),
+            Err(AuthenticationFailure::MissingToken) => Ok(None),
+            Err(AuthenticationFailure::InvalidToken) => Err(AuthenticationFailure::InvalidToken),
+        }
     }
 }
 
@@ -134,10 +169,9 @@ pub async fn registration(
 
 pub async fn get_current_user(
     State(state): State<Arc<AppState>>,
-    TypedHeader(token): TypedHeader<Token>,
+    Auth(user_id): Auth,
+    headers: HeaderMap,
 ) -> Json<ResponseUser> {
-    let user_id = authenticate(&token.0);
-
     let user = sqlx::query_as::<_, crate::database::User>(
         "
             SELECT * FROM `users` WHERE `id`=?
@@ -150,8 +184,13 @@ pub async fn get_current_user(
 
     Json(ResponseUser {
         user: User {
-            email: user.email.clone(),
-            token: token.0,
+            email: user.email,
+            token: headers
+                .get("authorization")
+                .unwrap() // Both this and the `to_str()`
+                .to_str() // call will not panic because the `Auth`
+                .unwrap() // extractor ensures that a header is present
+                .to_owned(),
             username: user.username,
             bio: user.bio,
             image: user.image,
@@ -175,11 +214,10 @@ pub struct UpdateUser {
 
 pub async fn update_user(
     State(state): State<Arc<AppState>>,
-    TypedHeader(token): TypedHeader<Token>,
+    Auth(user_id): Auth,
+    headers: HeaderMap,
     Json(update): Json<Update>,
 ) -> Json<ResponseUser> {
-    let user_id = authenticate(&token.0);
-
     async fn update_field(state: &AppState, user_id: i64, name: &str, value: &Option<String>) {
         if let Some(value) = value {
             sqlx::query(&format!(
@@ -204,5 +242,5 @@ pub async fn update_user(
     update_field(&state, user_id, "bio", &update.user.bio).await;
     update_field(&state, user_id, "image", &update.user.image).await;
 
-    get_current_user(State(state), TypedHeader(token)).await
+    get_current_user(State(state), Auth(user_id), headers).await
 }

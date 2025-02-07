@@ -28,17 +28,3 @@ pub struct Profile {
     pub image: Option<String>,
     pub following: bool,
 }
-
-pub async fn current_user(pool: &Pool, token: &str) -> User {
-    sqlx::query_as::<_, User>(
-        "
-            SELECT `id`, `email`, `password`, `username`, `bio`, `image`
-            FROM `users`
-            WHERE `users`.`email`=?
-        ",
-    )
-    .bind(token)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
