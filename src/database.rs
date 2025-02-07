@@ -19,3 +19,11 @@ pub struct User {
     pub bio: Option<String>,
     pub image: Option<String>,
 }
+
+#[derive(Debug, Clone, FromRow)]
+pub struct Profile {
+    pub username: String,
+    pub bio: Option<String>,
+    pub image: Option<String>,
+    pub following: bool,
+}

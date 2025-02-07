@@ -1,7 +1,9 @@
 mod auth;
+mod profile;
 mod database;
 
 use auth::{authentication, get_current_user, registration, update_user};
+use profile::{get_profile_authenticated, get_profile};
 use axum::{
     routing::{get, post, put},
     Router,
@@ -17,6 +19,7 @@ async fn main() {
         .route("/api/users", post(registration))
         .route("/api/user", get(get_current_user))
         .route("/api/user", put(update_user))
+        .route("/api/profiles/{username}", get(get_profile))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));
