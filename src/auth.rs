@@ -174,27 +174,29 @@ pub async fn update_user(
     TypedHeader(token): TypedHeader<Token>,
     Json(update): Json<Update>,
 ) -> Json<ResponseUser> {
-    async fn update_field(state: &AppState, name: &str, value: &Option<String>) {
+    async fn update_field(state: &AppState, token: &Token, name: &str, value: &Option<String>) {
         if let Some(value) = value {
             sqlx::query(&format!(
                 "
                     UPDATE `users`
                     SET {}=?
+                    WHERE `users`.`email`=?
                 ",
                 name
             ))
             .bind(&value)
+            .bind(&token.0)
             .execute(&state.db)
             .await
             .unwrap();
         }
     }
 
-    update_field(&state, "email", &update.user.email).await;
-    update_field(&state, "password", &update.user.password).await;
-    update_field(&state, "username", &update.user.username).await;
-    update_field(&state, "bio", &update.user.bio).await;
-    update_field(&state, "image", &update.user.image).await;
+    update_field(&state, &token, "email", &update.user.email).await;
+    update_field(&state, &token, "password", &update.user.password).await;
+    update_field(&state, &token, "username", &update.user.username).await;
+    update_field(&state, &token, "bio", &update.user.bio).await;
+    update_field(&state, &token, "image", &update.user.image).await;
 
     get_current_user(State(state), TypedHeader(token)).await
 }
