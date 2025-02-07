@@ -527,7 +527,7 @@ pub async fn create_article(
     Json(article): Json<CreateArticleRequest>,
 ) -> Json<ResponseSingleArticle> {
     let article = article.article;
-    let slug = article.title.replace(' ', "-").to_lowercase();
+    let slug = create_slug(&article.title);
 
     let id: i64 = sqlx::query_scalar(
         "
@@ -584,4 +584,103 @@ pub async fn create_article(
     };
 
     get_article(State(app), Some(Auth(user_id)), Path(slug)).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateArticleRequest {
+    article: UpdateArticle,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateArticle {
+    title: Option<String>,
+    description: Option<String>,
+    body: Option<String>,
+}
+
+pub async fn update_article(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Path(slug): Path<String>,
+    Json(article): Json<UpdateArticleRequest>,
+) -> Json<ResponseSingleArticle> {
+    let article = article.article;
+
+    let article_id: i64 = sqlx::query_scalar(
+        "
+            SELECT `id`
+            FROM `articles`
+            WHERE `slug`=? AND `author`=?
+        ",
+    )
+    .bind(&slug)
+    .bind(user_id) // Make sure only the owner can edit an article
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+
+    if article.title.is_none() && article.description.is_none() && article.body.is_none() {
+        return get_article(State(app), Some(Auth(user_id)), Path(slug)).await;
+    };
+
+    let attributes = vec![
+        article.title.as_ref().map(|_| "`slug`=?"), // Update the slug if the title changes
+        article.title.as_ref().map(|_| "`title`=?"),
+        article.description.as_ref().map(|_| "`description`=?"),
+        article.body.as_ref().map(|_| "`body`=?"),
+    ];
+
+    let new_slug = article
+        .title
+        .as_ref()
+        .map(|slug| create_slug(&slug))
+        .unwrap_or_else(|| slug);
+
+    let sql = format!(
+        "
+            UPDATE `articles`
+            SET
+            {}, `updatedAt`=CURRENT_TIMESTAMP
+            WHERE `id`=?
+        ",
+        attributes
+            .into_iter()
+            .filter_map(|i| i)
+            .collect::<Vec<&'static str>>()
+            .join(", ")
+    );
+
+    let query = sqlx::query(&sql);
+
+    let query = if let Some(_) = article.title {
+        query.bind(&new_slug)
+    } else {
+        query
+    };
+
+    let query = if let Some(ref title) = article.title {
+        query.bind(title)
+    } else {
+        query
+    };
+
+    let query = if let Some(description) = article.description {
+        query.bind(description)
+    } else {
+        query
+    };
+
+    let query = if let Some(body) = article.body {
+        query.bind(body)
+    } else {
+        query
+    };
+
+    query.bind(article_id).execute(&app.db).await.unwrap();
+
+    get_article(State(app), Some(Auth(user_id)), Path(new_slug)).await
+}
+
+fn create_slug(string: &str) -> String {
+    string.replace(' ', "-").to_lowercase()
 }
