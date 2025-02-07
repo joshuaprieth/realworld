@@ -4,7 +4,7 @@ mod database;
 mod profile;
 mod token;
 
-use articles::{feed_articles, get_article, list_articles};
+use articles::{create_article, feed_articles, get_article, list_articles};
 use auth::{authentication, get_current_user, registration, update_user};
 use axum::{
     routing::{delete, get, post, put},
@@ -28,6 +28,7 @@ async fn main() {
         .route("/api/articles", get(list_articles))
         .route("/api/articles/feed", get(feed_articles))
         .route("/api/articles/{slug}", get(get_article))
+        .route("/api/articles", post(create_article))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));

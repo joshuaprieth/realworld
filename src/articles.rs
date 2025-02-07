@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, QueryBuilder, Sqlite};
 use std::iter;
 use std::sync::Arc;
 
@@ -504,4 +504,84 @@ pub async fn get_article(
             author: profile,
         },
     })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateArticleRequest {
+    article: CreateArticle,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateArticle {
+    title: String,
+    description: String,
+    body: String,
+    tag_list: Option<Vec<String>>,
+}
+
+pub async fn create_article(
+    State(app): State<Arc<AppState>>,
+    Auth(user_id): Auth,
+    Json(article): Json<CreateArticleRequest>,
+) -> Json<ResponseSingleArticle> {
+    let article = article.article;
+    let slug = article.title.replace(' ', "-").to_lowercase();
+
+    let id: i64 = sqlx::query_scalar(
+        "
+            INSERT INTO `articles`
+            (`slug`, `title`, `description`, `body`, `author`)
+            VALUES
+            (?, ?, ?, ?, ?)
+            RETURNING `id`
+        ",
+    )
+    .bind(&slug)
+    .bind(article.title)
+    .bind(article.description)
+    .bind(article.body)
+    .bind(user_id)
+    .fetch_one(&app.db)
+    .await
+    .unwrap();
+
+    if let Some(mut tag_list) = article.tag_list {
+        if tag_list.len() > 999 {
+            panic!("Too many tags");
+        };
+
+        if !tag_list.is_empty() {
+            // We only need each tag once
+            tag_list.sort();
+            tag_list.dedup();
+
+            let tags = sqlx::query_as::<_, (String, i64)>(
+                "
+                SELECT `name`, `id`
+                FROM `tags`
+            ",
+            )
+            .fetch_all(&app.db)
+            .await
+            .unwrap();
+
+            let mut query: QueryBuilder<Sqlite> =
+                QueryBuilder::new("INSERT INTO `taglist` (`article`, `tag`) ");
+
+            query.push_values(tag_list, |mut query, tag| {
+                query
+                    .push_bind(id)
+                    .push_bind(
+                        tags.iter()
+                            .find_map(|(name, id)| if name == &tag { Some(id) } else { None }),
+                    );
+            });
+
+            query.build().execute(&app.db).await.unwrap();
+        };
+    };
+
+    get_article(State(app), Some(Auth(user_id)), Path(slug)).await
 }
