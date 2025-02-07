@@ -4,11 +4,11 @@ mod profile;
 
 use auth::{authentication, get_current_user, registration, update_user};
 use axum::{
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Router,
 };
 use database::Pool;
-use profile::{follow_user, get_profile};
+use profile::{follow_user, get_profile, unfollow_user};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -21,6 +21,7 @@ async fn main() {
         .route("/api/user", put(update_user))
         .route("/api/profiles/{username}", get(get_profile))
         .route("/api/profiles/{username}/follow", post(follow_user))
+        .route("/api/profiles/{username}/follow", delete(unfollow_user))
         .with_state(Arc::new(AppState {
             db: database::connect().await.unwrap(),
         }));

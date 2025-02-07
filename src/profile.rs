@@ -97,3 +97,29 @@ pub async fn follow_user(
 
     get_profile(State(app), Some(TypedHeader(token)), Path(username)).await
 }
+
+pub async fn unfollow_user(
+    State(app): State<Arc<AppState>>,
+    TypedHeader(token): TypedHeader<Token>,
+    Path(username): Path<String>,
+) -> Json<ResponseProfile> {
+    let user = crate::database::current_user(&app.db, &token.0).await;
+
+    sqlx::query(
+        "
+            DELETE FROM `follows`
+            WHERE `source`=? AND `target`=(
+                SELECT `id`
+                FROM `users`
+                WHERE `username`=?
+            )
+        ",
+    )
+    .bind(user.id)
+    .bind(&username)
+    .execute(&app.db)
+    .await
+    .unwrap();
+
+    get_profile(State(app), Some(TypedHeader(token)), Path(username)).await
+}
